@@ -1,0 +1,459 @@
+#!/usr/bin/python
+
+import re
+import os
+import sys
+debug = True
+
+lines = sys.stdin.readlines()
+lemma = sys.argv[1]
+
+# INPUT:
+# - lines contain a list of "%i:goal" where "%i" is the index of the goal
+# - lemma contain the name of the lemma under scrutiny
+# OUTPUT:
+# - (on stdout) a list of ordered index separated by EOL
+
+
+rank = []             # list of list of goals, main list is ordered by priority
+maxPrio = 110
+for i in range(0,maxPrio):
+  rank.append([])
+
+# SOURCES AND REUSE LEMMAS
+
+if lemma == "sqn_ue_invariance" or \
+     lemma == "sqn_HN_invariance" or \
+     lemma == "sqn_ue_src" or \
+     lemma == "sqn_HN_src":
+  for line in lines:
+    num = line.split(':')[0]
+    if re.match('.*Sqn_UE\(.*', line): rank[90].append(num)
+    elif re.match('.*Sqn_HN\(.*', line): rank[90].append(num)
+    elif re.match('.*St_1_UE\(.*', line): rank[95].append(num)
+    elif re.match('.*St_1_HN\(.*', line): rank[95].append(num)
+    
+elif lemma == "sqn_ue_nodecrease":
+  for line in lines:
+    num = line.split(':')[0]    
+    if re.match('.*\(last\(#j.*', line): rank[100].append(num)
+    elif re.match('.*\(#vr.. < #i\).*', line): rank[100].append(num)
+    elif re.match('.*\(#vr < #vr.5\).*', line): rank[98].append(num)
+    elif re.match('.*\(#vr < #i\).*', line): rank[100].append(num)
+    elif re.match('.*Sqn_UE_Change\(.*', line): rank[90].append(num)
+    elif re.match('.*Sqn_UE\(.*count.1.*', line): rank[70].append(num)
+
+
+# EXECUTABILITY LEMMAS
+elif lemma == "executability_honest_HN" or \
+     lemma == "executability_honest":
+  for line in lines:
+    num = line.split(':')[0]  
+    if re.match('.*!KU\( ~k.*', line): rank[100].append(num)
+    elif re.match('.*RcvS\(.*ProseAuthenticateResponse2.*PRUKID.*, K_NRprose.*', line): rank[100].append(num)
+    elif re.match('.*Sqn_HN\(.*~sqn_root\), ~sqn_root.*', line): rank[100].append(num)
+    elif re.match('.* !KU\( ~DUIK.*', line):rank[100].append(num)
+    elif re.match('.* !KU\( ~supi.*', line):rank[100].append(num)
+    elif re.match('.* !KU\( ~sqn_root.*', line):rank[99].append(num)
+    elif re.match('.*!KU\( f3\(~k.*', line): rank[100].append(num)
+    elif re.match('.*!KU\( f5\(~k.*', line): rank[100].append(num)
+    elif re.match('.* !KU\( ~sk.*', line):rank[100].append(num)
+    elif re.match('.* !KU\( ~RSC.*', line):rank[100].append(num)
+    elif re.match('.*St.*\(.*', line): rank[98].append(num)
+    elif re.match('.*Sqn_HN\(.*', line): rank[97].append(num)
+    elif re.match('.*RcvS\(.*', line): rank[94].append(num)
+    elif re.match('.*!K.\( aenc\(.*pk.*', line): rank[92].append(num)
+    elif re.match('.*!K.\( KDF\(KDF\(KDF\(<f3\(~k, RAND.*', line): rank[91].append(num)
+    elif re.match('.*!K.\( KDF\(KDF\(<f3\(~k, RAND.*', line): rank[91].append(num)
+    elif re.match('.*!K.\( KDF\(<f3\(~k, RAND.*', line): rank[91].append(num)
+    elif re.match('.*!K.\( KDF\(.*', line): rank[89].append(num)
+    elif re.match('.*!K.\( senc\(.*', line): rank[88].append(num)
+    elif re.match('.*!K.\( \(~RSC.*', line): rank[84].append(num)
+    elif re.match('.*~~>.*', line): rank[83].append(num)
+
+
+
+elif    lemma == "executability_desync":
+  for line in lines:
+    num = line.split(':')[0]  
+    if re.match('.*!KU\( ~k.*', line): rank[100].append(num)
+    elif re.match('.* !KU\( ~DUIK.*', line):rank[100].append(num)
+    elif re.match('.* !KU\( ~supi.*', line):rank[100].append(num)
+    elif re.match('.* !KU\( ~sqn_root.*', line):rank[100].append(num)
+    elif re.match('.*!KU\( f3\(~k.*', line): rank[100].append(num)
+    elif re.match('.* !KU\( ~sk.*', line):rank[100].append(num)
+    elif re.match('.* !KU\( ~RSC.*', line):rank[100].append(num)
+    elif re.match('.*!KU\( f5\(~k, ~RAND\) \)', line):rank[100].append(num)
+    elif re.match('.*!KU\( f5_star\(~k, ~RAND\) \)', line):rank[100].append(num)
+    elif re.match('.*!KU\( f1\(~k, ~RAND\) \)', line):rank[100].append(num)
+    elif re.match('.*!KU\( f1_star\(~k, ~RAND\) \)', line):rank[100].append(num)
+    elif re.match('.*!KU\( f5\(~k.1, ~RAND.1\) \)', line):rank[100].append(num)
+    elif re.match('.*!KU\( f5_star\(~k.1, ~RAND.1\) \)', line):rank[100].append(num)
+    elif re.match('.*!KU\( f1\(~k.1, ~RAND.1\) \)', line):rank[100].append(num)
+    elif re.match('.*!KU\( f1_star\(~k.1, ~RAND.1\) \)', line):rank[100].append(num)
+    elif re.match('.*!KU\( f1\(~k, <SqnHN, ~RAND>\) \)', line):rank[100].append(num)
+    elif re.match('.*!KU\( f1\(~k.1, <SqnHN, RAND.1>\) \)', line):rank[100].append(num)
+    elif re.match('.*HN_Resync_End\(.*', line): rank[99].append(num)
+    elif re.match('.*St.*\(.*', line): rank[98].append(num)
+    elif re.match('(?!<).*=.*=.*', line): rank[96].append(num)
+    elif re.match('.*=.*<.*', line): rank[96].append(num)
+    elif re.match('.*~~>.*', line): rank[94].append(num)
+    elif re.match('.*Sqn_HN\(.*', line): rank[94].append(num)
+    elif re.match('.*RcvS\(.*', line): rank[93].append(num)
+    elif re.match('.*!KU\(.*aenc\(.*pk.*', line): rank[92].append(num)
+    elif re.match('.*!KU\( KDF\(.*', line): rank[92].append(num)
+    elif re.match('.*!K.\( \(~RSC.*', line): rank[90].append(num)
+    elif re.match('.*!K.\( \(f5_star\(.*', line): rank[20].append(num)
+    elif re.match('.*Sqn_UE\(.*', line): rank[10].append(num)
+
+elif lemma == "executability_resync" or \
+     lemma == "executability_resync_HN" :
+  for line in lines:
+    num = line.split(':')[0]  
+    if re.match('.*!KU\( ~k.*', line): rank[100].append(num)
+    elif re.match('.* !KU\( ~DUIK.*', line):rank[100].append(num)
+    elif re.match('.* !KU\( ~supi.*', line):rank[100].append(num)
+    elif re.match('.*!KU\( f3\(~k.*', line): rank[100].append(num)
+    elif re.match('.* !KU\( ~sk.*', line):rank[100].append(num)
+    elif re.match('.* !KU\( ~RSC.*', line):rank[100].append(num)
+    elif re.match('.*!KU\( f5\(~k, ~RAND\) \)', line):rank[100].append(num)
+    elif re.match('.*!KU\( f5_star\(~k, ~RAND\) \)', line):rank[100].append(num)
+    elif re.match('.*!KU\( f1\(~k, ~RAND\) \)', line):rank[100].append(num)
+    elif re.match('.*!KU\( f1_star\(~k, ~RAND\) \)', line):rank[100].append(num)
+    elif re.match('.*!KU\( f5\(~k.1, ~RAND.1\) \)', line):rank[100].append(num)
+    elif re.match('.*!KU\( f5_star\(~k.1, ~RAND.1\) \)', line):rank[100].append(num)
+    elif re.match('.*!KU\( f1\(~k.1, ~RAND.1\) \)', line):rank[100].append(num)
+    elif re.match('.*!KU\( f1_star\(~k.1, ~RAND.1\) \)', line):rank[100].append(num)
+    elif re.match('.*HN_Resync_End\(.*', line): rank[99].append(num)
+    elif re.match('.*St.*\(.*', line): rank[98].append(num)
+    elif re.match('.*RcvS\(.*ProseAuthenticateResponse2.*PRUKID.*, K_NRprose.*', line): rank[97].append(num)
+    elif re.match('.*Sqn_HN\(.*', line): rank[97].append(num)
+    elif re.match('(?!<).*=.*=.*', line): rank[96].append(num)
+    elif re.match('.*=.*<.*', line): rank[96].append(num)
+    elif re.match('.* !KU\( ~sqn_root.*', line):rank[95].append(num)
+    elif re.match('.*~~>.*', line): rank[94].append(num)
+    elif re.match('.*RcvS\(.*', line): rank[93].append(num)
+    elif re.match('.*!K.\( KDF\(~DUCK.*', line): rank[92].append(num)
+    elif re.match('.*!K.\( KDF\(KDF\(KDF\(<f3\(~k, .RAND.*', line): rank[90].append(num)
+    elif re.match('.*!K.\( KDF\(KDF\(<f3\(~k, .RAND.*', line): rank[90].append(num)
+    elif re.match('.*!K.\( KDF\(<f3\(~k, .RAND.*', line): rank[90].append(num)
+    elif re.match('.*!KU\(.*aenc\(.*pk.*', line): rank[89].append(num)
+    elif re.match('.*!KU\( f1\(~k, <SqnHN, ~RAND>\) \)', line):rank[88].append(num)
+    elif re.match('.*!KU\( f1\(~k.1, <SqnHN, RAND.1>\) \)', line):rank[88].append(num)
+    elif re.match('.*!KU\( f1\(.*', line): rank[88].append(num)
+    elif re.match('.*!KU\( f1_star\(.*', line): rank[87].append(num)
+    elif re.match('.*!KU\( KDF\(.*', line): rank[19].append(num)
+    elif re.match('.*Sqn_UE\(.*', line): rank[10].append(num)
+    elif re.match('.*!KD\( \(~RSC.*', line): rank[10].append(num)
+
+
+#Secrecy lemmas
+
+#3m16 3m17 2m22 1m16  1m24  52s  47s
+elif lemma == "secrecy_remote_K_relay_sess_noKeyRev_noAsyKeyRev_noSupiRev_noSqnRev_noAllchanRev" or \
+     lemma == "secrecy_remote_K_relay_enc_noKeyRev_noAsyKeyRev_noSupiRev_noSqnRev_noAllchanRev" or \
+     lemma == "secrecy_remote_K_relay_int_noKeyRev_noAsyKeyRev_noSupiRev_noSqnRev_noAllchanRev" or \
+     lemma == "secrecy_remote_CP_PRUK_noKeyRev_noAsyKeyRev_noSupiRev_noSqnRev_noAllchanRev" or \
+     lemma == "secrecy_remote_CP_PRUK_ID_noKeyRev_noAsyKeyRev_noSupiRev_noSqnRev_noAllchanRev" or \
+     lemma == "secrecy_remote_K_NRprose_noKeyRev_noAsyKeyRev_noSupiRev_noSqnRev_noAllchanRev" or \
+     lemma == "secrecy_remote_SUPI_noKeyRev_noAsyKeyRev_noSupiRev_noSqnRev_noAllchanRev"  :
+  for line in lines:
+    num = line.split(':')[0]  
+    if re.match('.*!KU\( ~k \)', line): rank[100].append(num)
+    elif re.match('.*!KU\( ~sk_HN \)', line): rank[100].append(num)
+    elif re.match('.*St_3_UE\(.*', line): rank[98].append(num)
+    elif re.match('.*RcvS\(.*relaykeyresponse.*PRUKID.*', line): rank[96].append(num)
+    elif re.match('.*RcvS\(.*ProseAuthenticateResponse2.*PRUKID.*, K_NRprose.*', line): rank[96].append(num)
+    elif re.match('.*Sqn_HN\(.*~sqn_root\), ~sqn_root.*', line): rank[86].append(num)
+    elif re.match('.*!KU\( f3\(~k, .*', line): rank[85].append(num)
+    elif re.match('.*!KU\( KDF\(<f3.*', line): rank[83].append(num)
+    elif re.match('.*!KU\( KDF\(KDF\(<f3.*K_ausf.*', line): rank[81].append(num)
+    elif re.match('.*!KU\( KDF\(KDF\(KDF\(<f3.*K_ausf.*', line): rank[80].append(num)
+    elif re.match('.*RcvS\( .*~idSN, ~idHN,.*ProseAuthenticateRequest.*aenc\(<~supi.*', line): rank[75].append(num)
+    elif re.match('.*RcvS\( .*supi_relay.*~idSN.*relaykeyrequest.*aenc\(<~supi.*', line): rank[74].append(num)
+    elif re.match('.*!KU\( aenc\(<~supi,.*', line): rank[79].append(num)
+    elif re.match('.*!KU\( KDF\(KDF\(KDF\(KDF\(<f3.*K_ausf.*', line): rank[54].append(num)
+    elif re.match('.*!KU\( KDF\(KDF\(KDF\(KDF\(KDF\(<f3.*K_ausf.*', line): rank[52].append(num)
+    elif re.match('.*!KU\( KDF\(KDF\(KDF\(KDF\(KDF\(KDF\(<f3.*', line): rank[50].append(num)
+    elif re.match('.*!KU\( KDF\(KDF\(KDF\(KDF\(KDF\(KDF\(KDF\(<f3.*', line): rank[34].append(num)
+
+#16s  7s  15s 17s 17s
+elif lemma == "secrecy_relay_CP_PRUK_ID_noKeyRev_noAsyKeyRev_noSupiRev_noSqnRev_noAllchanRev" or \
+     lemma == "secrecy_relay_K_NRprose_noKeyRev_noAsyKeyRev_noSupiRev_noSqnRev_noAllchanRev" or \
+     lemma == "secrecy_relay_K_relay_sess_noKeyRev_noAsyKeyRev_noSupiRev_noSqnRev_noAllchanRev" or \
+     lemma == "secrecy_relay_K_relay_enc_noKeyRev_noAsyKeyRev_noSupiRev_noSqnRev_noAllchanRev" or \
+     lemma == "secrecy_relay_K_relay_int_noKeyRev_noAsyKeyRev_noSupiRev_noSqnRev_noAllchanRev":
+  for line in lines:
+    num = line.split(':')[0]  
+    if re.match('.*St_4_relay\(.*', line): rank[97].append(num)
+    elif re.match('.*!KU\( ~k \)', line): rank[97].append(num)
+    elif re.match('.*!KU\( ~sk_HN \)', line): rank[97].append(num)
+    elif re.match('.*!KU\( ~supi \)', line): rank[97].append(num)
+    elif re.match('.*RcvS\(.*relaykeyresponse.*PRUKID.*', line): rank[96].append(num)  
+    elif re.match('.*RcvS\(.*relaykeyresponse.*K_NRprose.*', line): rank[96].append(num) 
+    elif re.match('.*RcvS\(.*ProseAuthenticateResponse2.*PRUKID.*', line): rank[96].append(num)
+    elif re.match('.*Sqn_HN\(.*~sqn_root\), ~sqn_root.*', line): rank[96].append(num)
+    elif re.match('.*RcvS\(.*ProseAuthenticateResponse2.*, K_NRprose.*', line): rank[90].append(num)
+    elif re.match('.*RcvS\(.*supi_relay, ~idSN.*relaykeyrequest.*supi.*', line): rank[90].append(num)
+    elif re.match('.*!KU\( f3\(~k, ~RAND.*\) \)', line): rank[81].append(num)
+    elif re.match('.*!KU\( KDF\(<f3.*', line): rank[81].append(num)
+    elif re.match('.*!KU\( KDF\(KDF\(<f3.*', line): rank[80].append(num)
+    elif re.match('.*!KU\( KDF\(KDF\(KDF\(<f3.*', line): rank[78].append(num)
+    elif re.match('.*!KU\( KDF\(KDF\(KDF\(KDF\(<f3.*', line): rank[78].append(num)
+    elif re.match('.*!KU\( KDF\(KDF\(KDF\(KDF\(KDF\(<f3.*', line): rank[70].append(num)
+    elif re.match('.*!KU\( KDF\(KDF\(KDF\(KDF\(KDF\(KDF\(<f3.*', line): rank[70].append(num)
+    elif re.match('.*!KU\( aenc\(<~supi,.*', line): rank[65].append(num)
+
+
+elif lemma == "secrecy_SN_K_NRprose_noKeyRev_noAsyKeyRev_noSupiRev_noSqnRev_noAllchanRev" or \
+     lemma == "secrecy_SN_CP_PRUK_ID_noKeyRev_noAsyKeyRev_noSupiRev_noSqnRev_noAllchanRev" :
+  for line in lines:
+    num = line.split(':')[0]  
+    if re.match('.*St.*\(.*', line): rank[97].append(num)
+    elif re.match('.*!KU\( ~k \)', line): rank[97].append(num)
+    elif re.match('.*!KU\( ~RSC \)', line): rank[97].append(num)
+    elif re.match('.*RcvS\(.*relaykeyresponse.*PRUKID.*', line): rank[96].append(num) 
+    elif re.match('.*RcvS\(.*ProseAuthenticateResponse2.*K_NRprose.*', line): rank[90].append(num)
+    elif re.match('.*RcvS\(.*ProseAuthenticateResponse2.*PRUKID.*', line): rank[90].append(num)
+    elif re.match('.*!KU\( f3\(~k, ~RAND.*\) \)', line): rank[86].append(num)
+    elif re.match('.*!KU\( KDF\(<f3.*', line): rank[81].append(num)
+    elif re.match('.*!KU\( KDF\(KDF\(<f3.*', line): rank[81].append(num)
+    elif re.match('.*!KU\( KDF\(KDF\(KDF\(<f3.*', line): rank[81].append(num)
+    elif re.match('.*!KU\( KDF\( KDF\(KDF\(KDF\(<f3.*', line): rank[81].append(num)
+    elif re.match('.*!KU\( KDF\(~DU.K,.*', line): rank[80].append(num)
+
+elif lemma == "secrecy_HN_RSC_noKeyRev_noAsyKeyRev_noSupiRev_noSqnRev_noDiscoveryKeyRev_noAllchanRev" or \
+     lemma == "secrecy_SN_RSC_noKeyRev_noAsyKeyRev_noSupiRev_noSqnRev_noDiscoveryKeyRev_noAllchanRev" or \
+     lemma == "secrecy_relay_RSC_noKeyRev_noAsyKeyRev_noSupiRev_noSqnRev_noDiscoveryKeyRev_noAllchanRev" or \
+     lemma == "secrecy_remote_RSC_noKeyRev_noAsyKeyRev_noSupiRev_noSqnRev_noDiscoveryKeyRev_noAllchanRev" :
+  for line in lines:
+    num = line.split(':')[0]  
+    if re.match('.*St.*\(.*', line): rank[100].append(num)
+    elif re.match('.*RcvS\(.*ProseAuthenticateResponse2.*PRUKID.*', line): rank[99].append(num)
+    elif re.match('.*RcvS\(.*relaykeyresponse.*PRUKID.*', line): rank[98].append(num)
+    elif re.match('.*RcvS\(.*ProseAuthenticateRequest.*', line): rank[98].append(num)
+    elif re.match('.*RcvS\(.*relaykeyrequest.*', line): rank[98].append(num)    
+    elif re.match('.*!KU\( ~RSC.*', line): rank[96].append(num)
+    elif re.match('.* !KU\( KDF\(~DUCK.*', line):rank[95].append(num)
+    elif re.match('.*Sqn_HN\(.*~sqn_root\), ~sqn_root.*', line): rank[94].append(num)
+
+elif lemma == "secrecy_HN_SUPI_noKeyRev_noAsyKeyRev_noSupiRev_noSqnRev_noAllchanRev"  :
+  for line in lines:
+    num = line.split(':')[0]  
+    if re.match('.*St_1_HN\(.*', line): rank[97].append(num)
+    elif re.match('.*RcvS\(.*ProseAuthenticateResponse2.*PRUKID.*, K_NRprose.*', line): rank[96].append(num)
+    elif re.match('.*RcvS\(.*relaykeyresponse.*PRUKID.*', line): rank[96].append(num)
+    elif re.match('.* !KU\( ~supi.*', line):rank[33].append(num)
+    elif re.match('.* !KU\( ~sk.*', line):rank[33].append(num)
+
+
+#7s
+elif lemma == "secrecy_HN_CP_PRUK_noKeyRev_noAsyKeyRev_noSupiRev_noSqnRev_noAllchanRev" or \
+     lemma == "secrecy_HN_K_NRprose_noKeyRev_noAsyKeyRev_noSupiRev_noSqnRev_noAllchanRev" or \
+     lemma == "secrecy_HN_CP_PRUK_ID_noKeyRev_noAsyKeyRev_noSupiRev_noSqnRev_noAllchanRev":
+  for line in lines:
+    num = line.split(':')[0]  
+    if re.match('.*St_1_HN\(.*', line): rank[97].append(num)
+    elif re.match('.*!KU\( ~k \)', line): rank[97].append(num)
+    elif re.match('.*!KU\( ~sk_HN \)', line): rank[97].append(num)
+    elif re.match('.*!KU\( ~supi \)', line): rank[97].append(num)
+    elif re.match('.*RcvS\(.*relaykeyresponse.*PRUKID.*', line): rank[96].append(num)
+    elif re.match('.*RcvS\(.*ProseAuthenticateResponse2.*PRUKID.*, K_NRprose.*', line): rank[86].append(num)
+    elif re.match('.*!KU\( f3\(~k, ~RAND\) \)', line): rank[81].append(num)
+    elif re.match('.*!KU\( KDF\(<f3.*', line): rank[81].append(num)
+    elif re.match('.*!KU\( KDF\(KDF\(<f3.*', line): rank[81].append(num)
+    elif re.match('.*!KU\( KDF\(KDF\(KDF\(<f3.*', line): rank[81].append(num)
+
+# remote--relay AGREEMENTS LEMMAS  48m 12m
+elif lemma == "weakagreement_remote_relay_noKeyRev_noAsyKeyRev_noSupiRev_noSqnRev_noAllchanRev" or \
+     lemma == "weakagreement_remote_HN_noKeyRev_noAsyKeyRev_noSupiRev_noSqnRev_noAllchanRev"or \
+     lemma == "noninjectiveagreement_remote_relay_SeCap_noKeyRev_noAsyKeyRev_noSupiRev_noSqnRev_noAllchanRev" or \
+     lemma == "noninjectiveagreement_remote_relay_CPsecuritypolicy_noKeyRev_noAsyKeyRev_noSupiRev_noSqnRev_noAllchanRev" or \
+     lemma == "noninjectiveagreement_remote_relay_CP_PRUKID_noKeyRev_noAsyKeyRev_noSupiRev_noSqnRev_noAllchanRev" or \
+     lemma == "noninjectiveagreement_remote_relay_K_NRprose_noKeyRev_noAsyKeyRev_noSupiRev_noSqnRev_noAllchanRev" or \
+     lemma == "noninjectiveagreement_remote_relay_RSC_noKeyRev_noAsyKeyRev_noSupiRev_noSqnRev_noAllchanRev" or \
+     lemma == "noninjectiveagreement_remote_HN_CP_PRUK_noKeyRev_noAsyKeyRev_noSupiRev_noSqnRev_noAllchanRev" or \
+     lemma == "noninjectiveagreement_remote_HN_CP_PRUKID_noKeyRev_noAsyKeyRev_noSupiRev_noSqnRev_noAllchanRev" or \
+     lemma == "noninjectiveagreement_remote_HN_RSC_noKeyRev_noAsyKeyRev_noSupiRev_noSqnRev_noAllchanRev"  or \
+     lemma == "noninjectiveagreement_remote_HN_PLMNID_noKeyRev_noAsyKeyRev_noSupiRev_noSqnRev_noAllchanRev"  or \
+     lemma == "noninjectiveagreement_remote_HN_supi_noKeyRev_noAsyKeyRev_noSupiRev_noSqnRev_noAllchanRev" :
+  for line in lines:
+    num = line.split(':')[0]
+    if re.match('.*!KU\( ~k \)', line): rank[100].append(num)
+    elif re.match('.*!KU\( ~sk_HN \)', line): rank[97].append(num)
+    elif re.match('.*!KU\( ~supi \)', line): rank[97].append(num)
+    elif re.match('.*St_.*', line): rank[97].append(num)
+    elif re.match('.*RcvS\(.*relaykeyresponse.*PRUKID.*', line): rank[96].append(num)
+    elif re.match('.*RcvS\(.*ProseAuthenticateResponse2.*PRUKID.*, K_NRprose.*', line): rank[96].append(num)
+    elif re.match('.*Sqn_HN\(.*~sqn_root\), ~sqn_root.*', line): rank[86].append(num)
+    elif re.match('.*!KU\( f3\(~k, RAND\) \)', line): rank[82].append(num)
+    elif re.match('.*!KU\( KDF\(<f3.*\'K_ausf\'.*', line): rank[82].append(num)
+    elif re.match('.*!KU\( KDF\(KDF\(<f3.*\'K_ausf\'.*', line): rank[82].append(num)
+    elif re.match('.*!KU\( KDF\(KDF\(KDF\(<f3.*\'K_ausf\'.*', line): rank[81].append(num)
+    elif re.match('.*RcvS\( .*~idSN, ~idHN,.*ProseAuthenticateRequest.*aenc\(<~supi.*', line): rank[75].append(num)
+    elif re.match('.*RcvS\( .*supi_relay.*~idSN.*relaykeyrequest.*aenc\(<~supi.*', line): rank[74].append(num)
+    elif re.match('.*!KU\( KDF\(KDF\(KDF\(KDF\(<f3.*\'K_ausf\'.*', line): rank[54].append(num)
+    elif re.match('.*!KU\( KDF\(KDF\(KDF\(KDF\(KDF\(<f3.*\'K_ausf\'.*', line): rank[34].append(num)
+    elif re.match('.*!KU\( KDF\(KDF\(KDF\(KDF\(KDF\(KDF\(<f3.*\'K_ausf\'.*', line): rank[34].append(num)
+    elif re.match('.*!KU\( KDF\(KDF\(KDF\(KDF\(KDF\(KDF\(KDF\(<f3.*\'K_ausf\'.*', line): rank[34].append(num)
+    elif re.match('.*!KU\( senc\(<~User_info_relay.*', line): rank[20].append(num)  
+    elif re.match('.*RcvS\(.*idHN.., ~idSN.*ProseAuthenticateResponse2.*(KDF\(){4}<f3.*', line): rank[12].append(num)
+    elif re.match('.*!KU\( senc\(<~UP.*', line): rank[10].append(num)  
+
+
+
+# remote--relay AGREEMENTS LEMMAS 
+elif lemma == "weakagreement_relay_remote_noKeyRev_noAsyKeyRev_noSupiRev_noSqnRev_noAllchanRev" or \
+     lemma == "noninjectiveagreement_remote_relay_UPsecuritypolicy_noKeyRev_noAsyKeyRev_noSupiRev_noSqnRev_noAllchanRev" or \
+     lemma == "injectiveagreement_remote_relay_K_relay_sess_noKeyRev_noAsyKeyRev_noSupiRev_noSqnRev_noAllchanRev" or \
+     lemma == "injectiveagreement_remote_relay_K_relay_enc_noKeyRev_noAsyKeyRev_noSupiRev_noSqnRev_noAllchanRev" or \
+     lemma == "injectiveagreement_remote_relay_K_relay_int_noKeyRev_noAsyKeyRev_noSupiRev_noSqnRev_noAllchanRev"  or \
+     lemma == "injectiveagreement_remote_relay_K_sessID_noKeyRev_noAsyKeyRev_noSupiRev_noSqnRev_noAllchanRev" :
+  for line in lines:
+    num = line.split(':')[0]
+    if re.match('.*!KU\( ~k \)', line): rank[100].append(num)
+    elif re.match('.*!KU\( ~sk_HN \)', line): rank[97].append(num)
+    elif re.match('.*!KU\( ~supi \)', line): rank[97].append(num)
+    elif re.match('.*St_.*', line): rank[97].append(num)
+    elif re.match('.*RcvS\(.*ProseAuthenticateResponse2.*PRUKID.*, K_NRprose.*', line): rank[96].append(num)
+    elif re.match('.*RcvS\(.*relaykeyresponse.*PRUKID.*, K_NRprose.*', line): rank[96].append(num)
+    elif re.match('.*Sqn_HN\(.*~sqn_root\), ~sqn_root.*', line): rank[86].append(num)
+    elif re.match('.*!KU\( f3\(~k, RAND\) \)', line): rank[82].append(num)
+    elif re.match('.*!KU\( KDF\(<f3.*', line): rank[82].append(num)
+    elif re.match('.*!KU\( KDF\(KDF\(<f3.*', line): rank[82].append(num)
+    elif re.match('.*!KU\( KDF\(KDF\(KDF\(<f3.*K_ausf.*', line): rank[81].append(num)
+    elif re.match('.*RcvS\( .*~idSN, ~idHN,.*ProseAuthenticateRequest.*aenc\(<~supi.*', line): rank[75].append(num)
+    elif re.match('.*RcvS\( .*supi_relay.*~idSN.*relaykeyrequest.*aenc\(<~supi.*', line): rank[74].append(num)
+    elif re.match('.*!KU\( KDF\(KDF\(KDF\(KDF\(<f3.*', line): rank[54].append(num)
+    elif re.match('.*!KU\( KDF\(KDF\(KDF\(KDF\(KDF\(<f3.*', line): rank[34].append(num)
+    elif re.match('.*!KU\( KDF\(KDF\(KDF\(KDF\(KDF\(KDF\(<f3.*', line): rank[34].append(num)
+    elif re.match('.*!KU\( KDF\(KDF\(KDF\(KDF\(KDF\(KDF\(KDF\(<f3.*', line): rank[34].append(num)
+    elif re.match('.*RcvS\(.*idHN.., ~idSN.*ProseAuthenticateResponse2.*(KDF\(){4}<f3.*', line): rank[32].append(num)
+    elif re.match('.*RcvS\(.*relaykeyresponse.*(KDF\(){4}<f3.*', line): rank[32].append(num)
+    elif re.match('.*Commit.*', line): rank[31].append(num) 
+    elif re.match('.*!KU\( senc\(<~User_info_relay.*', line): rank[30].append(num)  
+    elif re.match('.*!KU\( senc\(<~UP.*', line): rank[26].append(num)  
+
+
+elif   lemma == "noninjectiveagreement_relay_SN_RSC_noKeyRev_noAsyKeyRev_noSupiRev_noSqnRev_noAllchanRev" or \
+       lemma == "weakagreement_relay_HN_noKeyRev_noAsyKeyRev_noSupiRev_noSqnRev_noAllchanRev" or \
+       lemma == "noninjectiveagreement_relay_HN_RSC_noKeyRev_noAsyKeyRev_noSupiRev_noSqnRev_noAllchanRev" or \
+       lemma == "noninjectiveagreement_relay_HN_K_NRprose_noKeyRev_noAsyKeyRev_noSupiRev_noSqnRev_noAllchanRev" or \
+       lemma == "noninjectiveagreement_relay_HN_CP_PRUKID_noKeyRev_noAsyKeyRev_noSupiRev_noSqnRev_noAllchanRev" :
+  for line in lines:
+    num = line.split(':')[0]
+    if  re.match('.*St_.*\(.*', line): rank[100].append(num)
+    elif re.match('.*RcvS\(.*ProseAuthenticateResponse2.*', line): rank[93].append(num)
+    elif re.match('.*RcvS\(.*relaykeyresponse.*', line): rank[93].append(num)
+    elif re.match('.*RcvS\( ~transactionid.*supi_relay, ~idSN.*relaykeyrequest.*', line): rank[63].append(num)
+    elif re.match('.*RcvS\( ~cid.*idSN, ~idHN.*ProseAuthenticateRequest.*', line): rank[62].append(num)  
+
+
+
+# relay--remote AGREEMENTS LEMMAS(2.30min)
+elif lemma == "noninjectiveagreement_relay_remote_CPsecuritypolicy_noKeyRev_noAsyKeyRev_noSupiRev_noSqnRev_noAllchanRev" or \
+     lemma == "noninjectiveagreement_relay_remote_UPsecuritypolicy_noKeyRev_noAsyKeyRev_noSupiRev_noSqnRev_noAllchanRev" or \
+     lemma == "noninjectiveagreement_relay_remote_CP_PRUKID_noKeyRev_noAsyKeyRev_noSupiRev_noSqnRev_noAllchanRev" or \
+     lemma == "noninjectiveagreement_relay_remote_RSC_noKeyRev_noAsyKeyRev_noSupiRev_noSqnRev_noAllchanRev" or \
+     lemma == "noninjectiveagreement_relay_remote_K_NRprose_noKeyRev_noAsyKeyRev_noSupiRev_noSqnRev_noAllchanRev" or \
+     lemma == "noninjectiveagreement_relay_remote_SeCap_noKeyRev_noAsyKeyRev_noSupiRev_noSqnRev_noAllchanRev" :
+  for line in lines:    
+    num = line.split(':')[0]
+    if  re.match('.*!KU\( ~k \)', line): rank[98].append(num)
+    elif re.match('.*Sqn_HN\(.*~sqn_root\), ~sqn_root.*', line): rank[96].append(num)
+    elif re.match('.*!KU\( f3\(~k, .RAND.*\)', line): rank[84].append(num)
+    elif re.match('.*St.*\(.*', line): rank[80].append(num)
+    elif re.match('.*RcvS\(.*relaykeyresponse.*PRUKID.*', line): rank[80].append(num)
+    elif re.match('.*RcvS\(.*relaykeyresponse.*K_NRprose.*', line): rank[80].append(num)
+    elif re.match('.*RcvS\(.*ProseAuthenticateResponse2.*PRUKID.*', line): rank[80].append(num)
+    elif re.match('.*RcvS\( .*~idSN, ~idHN,.*ProseAuthenticateRequest.*aenc\(<~supi.*', line): rank[80].append(num)
+    elif re.match('.*!KU\( KDF\(<f3.*', line): rank[79].append(num)   
+    elif re.match('.*!KU\( KDF\(KDF\(<f3.*', line): rank[77].append(num) 
+    elif re.match('.*!KU\( KDF\(KDF\(KDF\(<f3.*K_ausf.*', line): rank[76].append(num)
+    elif re.match('.*!KU\( KDF\(KDF\(KDF\(KDF\(<f3.*', line): rank[75].append(num)
+    elif re.match('.*RcvS\( ~transactionid.*supi_relay, ~idSN.*relaykeyrequest.*', line): rank[63].append(num)
+    elif re.match('.*RcvS\( .*ProseAuthenticateResponse2.*t, K_NRprose.*', line): rank[60].append(num) 
+    elif re.match('.*!KU\( senc\(<~UP.*', line): rank[58].append(num)
+    elif re.match('.*!KU\( KDF\(KDF\(KDF\(KDF\(KDF\(<f3.*', line): rank[54].append(num)
+    elif re.match('.*!KU\( KDF\(KDF\(KDF\(KDF\(KDF\(KDF\(<f3.*', line): rank[52].append(num)
+    elif re.match('.*!KU\( KDF\(KDF\(KDF\(KDF\(KDF\(KDF\(KDF\(<f3.*', line): rank[51].append(num)
+
+elif   lemma == "injectiveagreement_relay_remote_K_relay_int_noKeyRev_noAsyKeyRev_noSupiRev_noSqnRev_noAllchanRev" or \
+       lemma == "injectiveagreement_relay_remote_K_relay_enc_noKeyRev_noAsyKeyRev_noSupiRev_noSqnRev_noAllchanRev" or \
+       lemma == "injectiveagreement_relay_remote_K_relay_sess_noKeyRev_noAsyKeyRev_noSupiRev_noSqnRev_noAllchanRev" or \
+       lemma == "injectiveagreement_relay_remote_K_sessID_noKeyRev_noAsyKeyRev_noSupiRev_noSqnRev_noAllchanRev":
+  for line in lines:
+    num = line.split(':')[0]
+    if  re.match('.*St_.*\(.*', line): rank[100].append(num)
+    elif re.match('.*!KU\( ~k \)', line): rank[100].append(num)
+    elif re.match('.*RcvS\(.*relaykeyresponse.*PRUKID.*', line): rank[96].append(num)
+    elif re.match('.*RcvS\(.*ProseAuthenticateResponse2.*K_NRprose.*', line): rank[93].append(num)
+    elif re.match('.*Sqn_HN\(.*~sqn_root\), ~sqn_root.*', line): rank[86].append(num)
+    elif re.match('.*!KU\( f.\(~k, ~RAND.* \)', line): rank[79].append(num)
+    elif re.match('.*!KU\( KDF\(<f3.*', line): rank[79].append(num)
+    elif re.match('.*!KU\( KDF\(KDF\(<f3.*', line): rank[79].append(num)
+    elif re.match('.*Commit.*', line): rank[79].append(num)
+    elif re.match('.*RcvS\( .*idHN.., ~idSN.*ProseAuthenticateResponse2.*(KDF\(){4}<.*', line): rank[79].append(num)
+    elif re.match('.*RcvS\( .*~idSN, ~idHN,.*ProseAuthenticateRequest.*aenc\(<~supi.*', line): rank[79].append(num)
+    elif re.match('.*!KU\( KDF\(KDF\(KDF\(<f3.*K_ausf.*', line): rank[78].append(num)
+    elif re.match('.*!KU\( KDF\(KDF\(KDF\(KDF\(<f3.*', line): rank[77].append(num)
+    elif re.match('.*!KU\( KDF\(KDF\(KDF\(KDF\(KDF\(<f3.*', line): rank[76].append(num)
+    elif re.match('.*!KU\( KDF\(KDF\(KDF\(KDF\(KDF\(KDF\(<f3.*', line): rank[74].append(num)
+    elif re.match('.*!KU\( KDF\(KDF\(KDF\(KDF\(KDF\(KDF\(KDF\(<f3.*', line): rank[74].append(num)
+    elif re.match('.*RcvS\( ~transactionid.*supi_relay, ~idSN.*relaykeyrequest.*', line): rank[63].append(num)
+    elif re.match('.*!KU\( senc\(<~UP.*', line): rank[62].append(num)
+
+elif lemma == "weakagreement_relay_SN_noKeyRev_noAsyKeyRev_noSupiRev_noSqnRev_noAllchanRev" or \
+     lemma == "noninjectiveagreement_relay_SN_RSC_noKeyRev_noAsyKeyRev_noSupiRev_noSqnRev_noAllchanRev" or \
+     lemma == "noninjectiveagreement_relay_SN_supi_relay_noKeyRev_noAsyKeyRev_noSupiRev_noSqnRev_noAllchanRev" or \
+     lemma == "noninjectiveagreement_relay_SN_PLMNID_noKeyRev_noAsyKeyRev_noSupiRev_noSqnRev_noAllchanRev" :
+  for line in lines:
+    num = line.split(':')[0]
+    if  re.match('.*St.*\(.*', line): rank[100].append(num)
+    elif re.match('.*RcvS\(.*relaykeyresponse.*PRUKID.*', line): rank[96].append(num)
+    elif re.match('.*RcvS\(.*ProseAuthenticateResponse2.*K_NRprose.*', line): rank[93].append(num)
+    elif re.match('.*RcvS\( ~transactionid.*supi_relay, ~idSN.*relaykeyrequest.*', line): rank[63].append(num)
+
+
+ 
+
+# SN-remote AGREEMENTS LEMMAS
+elif lemma == "weakagreement_HN_remote_noKeyRev_noAsyKeyRev_noSupiRev_noSqnRev_noAllchanRev" or \
+     lemma == "noninjectiveagreement_HN_remote_CP_PRUK_noKeyRev_noAsyKeyRev_noSupiRev_noSqnRev_noAllchanRev" or \
+     lemma == "noninjectiveagreement_HN_remote_CP_PRUKID_noKeyRev_noAsyKeyRev_noSupiRev_noSqnRev_noAllchanRev" or \
+     lemma == "noninjectiveagreement_HN_remote_RSC_noKeyRev_noAsyKeyRev_noSupiRev_noSqnRev_noAllchanRev" or \
+     lemma == "noninjectiveagreement_HN_remote_PLMNID_noKeyRev_noAsyKeyRev_noSupiRev_noSqnRev_noAllchanRev" or \
+     lemma == "noninjectiveagreement_HN_remote_supi_noKeyRev_noAsyKeyRev_noSupiRev_noSqnRev_noAllchanRev" :
+  for line in lines:
+    num = line.split(':')[0]
+    if  re.match('.*!KU\( ~k \)', line): rank[95].append(num)
+    elif re.match('.*!KU\( ~supi \)', line): rank[95].append(num)
+    elif re.match('.*!KU\( ~sk_HN \)', line): rank[95].append(num)
+    elif re.match('.*!KU\( f3\(.*\)', line): rank[95].append(num)
+    elif re.match('.*!KU\( KDF\(<f3.*', line): rank[88].append(num)
+    elif re.match('.*!KU\( KDF\(KDF\(<f3.*', line): rank[88].append(num)
+    elif re.match('.*St.*\(.*', line): rank[88].append(num)
+    elif re.match('.*Sqn_HN\(.*~sqn_root\), ~sqn_root.*', line): rank[86].append(num)
+    elif re.match('.*RcvS\(.*relaykeyresponse.*PRUKID.*', line): rank[86].append(num)
+    elif re.match('.*RcvS\(.*ProseAuthenticateResponse2.*PRUKID.*, K_NRprose.*', line): rank[86].append(num)
+    elif re.match('.*RcvS\( .*(KDF\(){3}<f3\(~k.*', line): rank[80].append(num)
+    #elif re.match('.*RcvS\( .*~cid.*relay_auth_request.*', line): rank[79].append(num)
+    #elif re.match('.*RcvS\( .*~cid.*relaykeyrequest.*', line): rank[76].append(num)
+    elif re.match('.*RcvS\( .*~cid,.*ProseAuthenticateRequest.*', line): rank[76].append(num)
+    elif re.match('.*RcvS\( .*transactionid.*relayauthresponse.*', line): rank[74].append(num) 
+    elif re.match('.*RcvS\( .*~cid.*ProSe_access_success.*', line): rank[73].append(num) 
+    elif re.match('.*RcvS\( .*relayauthresponse.*XRES, AT_MAC_UE.*', line): rank[70].append(num)
+    #elif re.match('.*RcvS\( .*(KDF\(){3}<f3\(~k.*~RSC>\)', line): rank[70].append(num)
+    elif re.match('.*!KU\( KDF\(KDF\(KDF\(<f3.*~RSC>\)', line): rank[70].append(num)
+    elif re.match('.*!KU\( KDF.*KDF\(KDF\(KDF\(<f3.*', line): rank[70].append(num)
+    elif re.match('.*!KU\( senc\(.*', line): rank[68].append(num)
+
+else:
+  exit(0)
+
+# Ordering all goals by ranking (higher first)
+for listGoals in reversed(rank):
+  for goal in listGoals:
+    sys.stderr.write(goal)
+    print (goal)
+
