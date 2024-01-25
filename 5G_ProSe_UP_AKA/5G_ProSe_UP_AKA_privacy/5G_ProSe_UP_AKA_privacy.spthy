@@ -1,0 +1,728 @@
+theory UP_5G_Prose_authentication_protocol
+
+begin
+
+builtins:
+	asymmetric-encryption, multiset, xor, symmetric-encryption
+
+functions:
+	// AKA functions (TS 33.102)
+	f1/2, 	   // MAC-function 	--> MAC
+	f2/2, 	   // MAC-function 	
+	f3/2, 	   // KDF 	        --> CK
+	f4/2, 	   // KDF           --> IK
+	f5/2, 	   // KDF          	--> AK (Hide Sqn)
+	f1_star/2,     // MAC-function 	--> MACS
+	f5_star/2,     // KDF	   	--> AKS (Hide Sqn)
+
+	// 3GPP KDFs (TS 33.503, TS 33.536, RFC5448)
+	KDF/2,	   // KDF		--> GPI_MAC, UP_PRUK, K_NRp, K_relay_sess, K_relay_enc, K_relay_int
+
+	//TS 33.503, integrity protection algorithms
+	Int/2  
+
+/************************************/
+/*    Channel:   relay .<->. PKMF,  PKMF .<->. HN      */
+/************************************/
+// This is a standard, secure channel abstraction, here we reuse the channel model from work 
+// by Basin, Radomirovic and Schmid: Modeling Human Errors in Security Protocols
+// (CSF 2016)
+// This version does provide replay protection, order-preserving (binding chanel).
+rule send_secure:
+	[SndS(~cid,A,B,m)]	// ~cid denotes a channel identifier: should always be a fresh name
+	-->
+	[Sec(~cid,A,B,m)]
+
+rule receive_secure:
+	[Sec(~cid,A,B,m)]
+	-->
+	[RcvS(~cid,A,B,m)]
+
+
+/************************************/
+/*     Initialization Rules         */
+/************************************/
+
+// Initialize a PKMF of relay
+rule init_PKMF_relay:
+
+	[ Fr(~idPKMF) ] // idPKMF denotes the id of PKMF of relay, i.e. NAF_Id: The FQDN of the NAF see 33.223
+	--[ PKMF_relay(~idPKMF) ]->
+	[!PKMF(~idPKMF), Out(~idPKMF)]
+
+// Initialize a home network
+rule init_homeNet:
+	[Fr(~sk_HN),
+	  Fr(~idHN)]
+	--[ HomeNet(~idHN) ]->
+	[!HN(~idHN, ~sk_HN),
+	 !Pk(~idHN, pk(~sk_HN)),
+	 Out(<~idHN, pk(~sk_HN)>)]
+
+//Initialize discovery credentials
+rule add_RSC:
+	[Fr(~RSC),
+	 Fr(~DUCK),  	// 6.3.5 TS33.503  h30
+	 Fr(~DUIK) 	// 6.3.5 TS33.503  h30
+	 ]
+	-->
+	[
+	 !Ltk_Prose(~RSC, ~DUCK, ~DUIK)]
+
+
+rule supi_supply:
+        [Fr(~a), Fr(~b)]
+	--[ Once() ]->
+	[!SUPI_Init(~a+~b),
+         SUPI(~a), 
+         SUPI(diff(~a,~b))]
+
+// Initialize the subscription
+rule add_subscription:
+	[!SUPI_Init(~supi+z),
+	 Fr(~k),
+	 Fr(~sqn_root),
+	 Fr(~User_info_remote), // User info ID of Remote UE, refer to 6.4.3.6  TS23.304  i30
+	 !HN(~idHN, ~sk_HN)]
+	--[
+		// Restriction
+		Subscribe(~supi, ~idHN),
+
+		// Helper lemmas
+		Sqn_Create(~supi, ~idHN, ~sqn_root),
+		CreateUser(~supi, ~k, ~idHN)
+	]->
+	[!Ltk_Sym(~supi, ~idHN, ~k, ~sqn_root, ~User_info_remote),
+	 Sqn_UE(~supi, ~idHN, ~sqn_root+'1', ~sqn_root, '1'),
+	 Sqn_HN(~supi, ~idHN, ~sqn_root+'1', ~sqn_root, '1')]
+
+//initialize the relay, we assume that the relay has been authorized to provide RSC service before executing the protocol. 
+// here the relay  already has a secure channel with the single PKMF.
+rule init_Relay:
+	[ 
+	Fr(~User_info_relay),  //user_info_relay denotes User info ID of relay, refer to section 6.4.3.6 and 5.8.1.8 in 23.304
+	!PKMF(~idPKMF),  
+	Fr(~supi_relay)]  	// supi_relay is equivalent to the  Priv_Id of relay, e.g. IMPI/IMSI in 33.223
+	--[
+		CreateRelay( ~supi_relay) 
+	]->
+	[!Relay(~User_info_relay, ~supi_relay, ~idPKMF)]
+
+
+/************************************/
+/*         Key Leakage              */
+/************************************/
+
+// NOTE: Rules for compromised channel are defined above.
+// Compromised subscriptions (identifier of relay)
+rule reveal_Ltk_supi_relay:
+	[!Relay(~User_info_relay, ~supi_relay, ~idPKMF)]
+	--[
+		// Security properties
+		Rev(~supi_relay, <'supi_relay', ~supi_relay>),
+		Rev(~idPKMF,       <'supi_relay', ~supi_relay>)
+	]->
+	[Out(~supi_relay)]
+
+// Compromised subscriptions (relay service code)
+rule reveal_Ltk_RSC:
+	[!Ltk_Prose(~RSC, ~DUCK, ~DUIK),
+	 !Ltk_Sym(~supi, ~idHN, ~k, ~sqn_root, ~User_info_remote),
+	 !Relay(~User_info_relay, ~supi_relay, ~idPKMF)]
+	--[
+		// Security properties
+		Rev(~supi,       <'RSC', ~RSC>),
+		Rev(~supi_relay, <'RSC', ~RSC>)
+	]->
+	[Out(~RSC)]
+
+
+// Compromised subscriptions (DUIK)
+rule reveal_Ltk_DUIK:
+	[!Ltk_Prose(~RSC, ~DUCK, ~DUIK), 
+	 !Ltk_Sym(~supi, ~idHN, ~k, ~sqn_root, ~User_info_remote),
+	 !Relay(~User_info_relay, ~supi_relay, ~idPKMF)]
+	--[
+		// Security properties
+		Rev(~supi,       <'DUIK', ~DUIK>),
+		Rev(~supi_relay, <'DUIK', ~DUIK>)
+	]->
+	[Out(~DUIK)]
+
+// Compromised subscriptions (DUCK)
+rule reveal_Ltk_DUCK:
+	[!Ltk_Prose(~RSC, ~DUCK, ~DUIK),
+	 !Ltk_Sym(~supi, ~idHN, ~k, ~sqn_root, ~User_info_remote),
+	 !Relay(~User_info_relay, ~supi_relay, ~idPKMF)]
+	--[
+		// Security properties
+		Rev(~supi,       <'DUCK', ~DUCK>),
+		Rev(~supi_relay, <'DUCK', ~DUCK>)
+	]->
+	[Out(~DUCK)]
+
+/************************************/
+/*       Protocol Rules             */
+/************************************/
+
+// Direct Communication Request, here we consider the suci case.
+rule ue_send_DCR_step1:
+	let
+		suci = < aenc{<~supi, ~R>}pk_HN, ~idHN>  
+		con_keystream = KDF(~DUCK, <~Nonce1, ~RSC>)  //here we use fresh Nonce1 to replace UTC-counter value and to ensure the freshness of the keystream.
+		con_RSC = con_keystream XOR ~RSC  // refer to section 6.3.5.2 TS 33.503
+		MIC = KDF(~DUIK, <suci, ~User_info_remote, ~User_info_relay, con_RSC, ~Nonce1, ~SeCap, ~CP_Se_Po, ~MSB_KsessID> ) // refer to section 6.3.5.3 in 33.503
+		msg = <suci, ~User_info_remote, ~User_info_relay, con_RSC, ~Nonce1, ~SeCap, ~CP_Se_Po, ~MSB_KsessID, MIC> 	
+	in
+	[!Ltk_Sym(~supi, ~idHN, ~k, ~sqn_root, ~User_info_remote),
+	 !Ltk_Prose(~RSC, ~DUCK, ~DUIK),
+	 SUPI(~supi),
+	 !Pk(~idHN, pk_HN),
+	 !Relay(~User_info_relay, ~supi_relay, ~idPKMF),
+	 Fr(~SeCap),       	//SeCap means security capability, 6.3.2 TS33.503  h30
+	 Fr(~CP_Se_Po), 	//CP_Se_Po means signaling security policy, 6.3.2 TS33.503  h30
+	 Fr(~UP_Se_Po), 	// UP_Se_Po means user plane security policy, 6.3.2 TS33.503  h30
+	 Fr(~R),
+	 Fr(~MSB_KsessID),		 //most significant bits of Krelay_sess ID, see 33.536
+	 Fr(~Nonce1)]     //equivalent to the freshness parameter 1
+	--[
+		Start_UE_Session(~supi),
+		Running(~supi, ~idHN, <'HN','remote', <'RSC', ~RSC>>),
+		Running(~supi, ~idHN, <'HN','remote', <'supi', ~supi>>)
+	]->
+	[St_1_UE(~supi_relay, ~supi, ~User_info_remote, ~User_info_relay, ~idHN,  ~k, ~sqn_root, ~RSC, ~Nonce1, ~DUCK, ~DUIK, ~SeCap, ~CP_Se_Po, ~UP_Se_Po, ~MSB_KsessID),
+	 Out(msg)]
+
+rule relay_send_relaykeyrequest_step2:
+	let
+		suci = < aenc{<~supi, ~R>}pk_HN, ~idHN>
+		con_keystream=KDF(~DUCK,<Nonce1,~RSC>)
+		con_RSC=con_keystream XOR ~RSC  // refer to section 6.3.5.2
+		MIC = KDF(~DUIK, <suci, ~User_info_remote, ~User_info_relay, con_RSC, Nonce1, ~SeCap, ~CP_Se_Po, ~MSB_KsessID>) 
+		msgin = <suci, ~User_info_remote, ~User_info_relay, con_RSC, Nonce1, ~SeCap, ~CP_Se_Po, ~MSB_KsessID, MIC>
+		msgout = <~transactionid, suci, ~RSC, Nonce1>
+	in
+	[Fr(~transactionid),  //same as the B-TID in 33.223
+	//Fr(~PLMNID),
+	In(msgin),
+	!Ltk_Prose(~RSC, ~DUCK, ~DUIK),
+	!Relay(~User_info_relay, ~supi_relay, ~idPKMF)]
+	--[
+		//Executability
+		Out_relay(~transactionid, suci, ~RSC, Nonce1),
+		Start_relay_Session(~supi_relay),
+		Running( ~supi_relay, ~idPKMF, <'PKMF', 'relay', <'RSC', ~RSC>>),
+		Running( ~supi_relay, ~idPKMF, <'PKMF', 'relay',<'supi_relay', ~supi_relay>>)
+	]->
+	[St_1_relay(~transactionid, suci, ~supi,~User_info_relay, ~idPKMF, ~idHN, ~supi_relay, ~RSC, Nonce1, ~SeCap, ~CP_Se_Po, ~MSB_KsessID),
+	SndS(~transactionid, ~supi_relay, ~idPKMF, <'relaykeyrequest', msgout>)
+	]
+
+
+rule PKMF_receive_relaykeyrequest_step3:
+	let
+		suci = < aenc{<~supi, ~R>}pk_HN, idHN>
+		msgin = <transactionid, suci, RSC, Nonce1>
+		msgout = <suci, RSC, Nonce1>
+
+	in
+	[!PKMF(~idPKMF),
+	 Fr(~cid),
+	!Relay(~User_info_relay, supi_relay, ~idPKMF),	 
+	 RcvS(transactionid, supi_relay, ~idPKMF, <'relaykeyrequest', msgin>)]
+	--[
+		// Executability
+		Start_PKMF_Session(~idPKMF),
+		In_PKMF(transactionid, suci, RSC, Nonce1),
+		Running( ~idPKMF, idHN, <'HN', 'PKMF',<'RSC', RSC>>)
+		
+	]->
+	[St_1_PKMF(transactionid, suci, ~User_info_relay, ~supi, ~idPKMF, supi_relay, idHN, RSC, Nonce1, ~cid),
+	 SndS(~cid, ~idPKMF, idHN, <'ProseAuthenticateRequest', msgout>)]
+
+// Nausf_UEAuthentication_ProseAuthenticateRequest (Nausf_UE_PAR) (see TS 33.503 6.3.3.3.2).
+// Note: the AUSF, UDM, PAnF are integrated as HN or HN. some messages among them are ingored.
+rule HN_receive_Nausf_UE_PAR_step4:
+	let
+	    // 1. Receive
+		suci = <aenc{<~supi, ~R>}pk(~sk_HN), ~idHN>
+		msgIn = <suci, ~RSC, Nonce1>
+		SqnNext = SqnHN + '1'
+		// 2. Send
+		MAC = f1(~k, <SqnNext, ~RAND>)
+		CK = f3(~k, ~RAND)
+		IK = f4(~k, ~RAND)
+		AK = f5(~k, ~RAND)
+		AUTN = <SqnNext XOR AK, MAC>
+		GPI_K_Enc = KDF( <CK, IK>, <~RAND, ~supi, 'GPI_confidentiality'> )//ignore the useless 'gba-me'
+		P_TID = senc(UP_PRUKID, GPI_K_Enc)
+		GPI_K_Int = KDF( <CK, IK>, < ~RAND, ~supi, 'GPI_integrity'> )
+		GPI_MAC = Int(GPI_K_Int, <~RAND, AUTN, senc(UP_PRUKID, GPI_K_Enc)>)
+		GPI=<~RAND, AUTN, P_TID, GPI_MAC> // see 5.3.2 TS33.223
+		UP_PRUK=KDF(<CK,IK>,< ~RAND, ~supi,  ~idHN>) //here IMPI, NAF_ID are replaced as supi, idHN. see TS33.220 B.3
+		K_NRp = KDF(UP_PRUK, <~RSC, Nonce1, ~Nonce2>)	
+    in
+	[!HN(~idHN, ~sk_HN),
+	 RcvS(~cid, idPKMF, ~idHN, <'ProseAuthenticateRequest', msgIn>),
+	 !Ltk_Sym(~supi, ~idHN, ~k, ~sqn_root, ~User_info_remote),
+	 !Relay(~User_info_relay, ~supi_relay, idPKMF),
+	 Sqn_HN(~supi, ~idHN, SqnHN, ~sqn_root, count),
+	 Fr(~RAND),
+	 Fr(UP_PRUKID),
+	 Fr(~Nonce2),
+	 In(count)
+	 ]
+	--[
+		// Open chains
+		Sqn_HN_Invariance(~idHN, ~supi, SqnNext, ~sqn_root, count+'1'),
+		
+		Out_HN(<K_NRp, ~Nonce2, UP_PRUKID, <~RAND, AUTN, P_TID, GPI_MAC>>),
+		// Executability
+		Start_HN_Session(~idHN),
+		
+		// Security properties
+		Secret(<'HN', ~idHN>, 'UPPRUK', UP_PRUK),
+		Secret(<'HN', ~idHN>, 'UPPRUKID', UP_PRUKID),
+		Secret(<'HN', ~idHN>, 'RSC', ~RSC),
+		Secret(<'HN', ~idHN>, 'supi', ~supi),
+		Secret(<'HN', ~idHN>, 'K_NRp', K_NRp),
+		Running(~idHN, ~supi, <'remote', 'HN', <'RSC', ~RSC>>),	
+		Running(~idHN, ~supi, <'remote', 'HN', <'UP_PRUK', UP_PRUK>>),
+		Running(~idHN, ~supi, <'remote', 'HN', <'UP_PRUKID', UP_PRUKID>>),	
+		Running(~idHN, ~supi, <'remote', 'HN', <'supi', ~supi>>),
+		Running(~idHN,  idPKMF, <'PKMF', 'HN', <'RSC', ~RSC>>),
+		Running(~idHN, ~supi_relay, <'relay', 'HN', <'RSC', ~RSC>>),
+		Running(~idHN, ~supi_relay, <'relay', 'HN', <'UP_PRUKID', UP_PRUKID>>),	
+		Running(~idHN, ~supi_relay, <'relay', 'HN', <'K_NRp', K_NRp>>),	
+		
+		Commit( ~idHN, ~supi, <'HN','remote', <'RSC', ~RSC>>),
+		Commit( ~idHN, ~supi, <'HN','remote', <'supi', ~supi>>),
+		Commit( ~idHN,  idPKMF, <'HN','PKMF', <'RSC', ~RSC>>),
+		Honest( ~supi),
+		Honest( ~supi_relay),
+		Honest( ~idHN),
+		Honest(  idPKMF)
+		
+	]->
+	[St_1_HN(~idHN, suci, ~supi, ~User_info_relay, ~supi_relay, idPKMF, ~k, SqnNext,  ~RAND, ~sqn_root, ~sk_HN, ~cid, ~RSC, Nonce1, UP_PRUK, UP_PRUKID),
+     Sqn_HN(~supi, ~idHN, SqnNext, ~sqn_root, count+'1'),
+     SndS(~cid, ~idHN, idPKMF, <'ProseAuthenticateResponse', <K_NRp, ~Nonce2, UP_PRUKID, <~RAND, AUTN, P_TID, GPI_MAC>>>)]
+
+// Nausf_UEAuthentication_ProseAuthenticateResponse (Nausf_UE_PAResponse) (see TS 33.503 6.3.3.3.2).
+rule PKMF_receive_Nausf_UE_PAResponse_step5:
+	let
+	
+		msgIn = <K_NRp, ~Nonce2, UP_PRUKID, <RAND, AUTN, P_TID, GPI_MAC>>
+        msgOut = <K_NRp, ~Nonce2, UP_PRUKID, <RAND, AUTN, P_TID, GPI_MAC>>
+    in	
+	[St_1_PKMF(transactionid, suci, User_info_relay, ~supi, ~idPKMF, supi_relay, idHN, RSC, Nonce1, ~cid),
+	 RcvS(~cid, idHN, ~idPKMF, <'ProseAuthenticateResponse', msgIn>)]
+	--[
+		// Open chains
+		In_PKMF2(<K_NRp, ~Nonce2, UP_PRUKID, <RAND, AUTN, P_TID, GPI_MAC>>),
+		Out_PKMF2(K_NRp, ~Nonce2, UP_PRUKID, <RAND, AUTN, P_TID, GPI_MAC>),
+		// Executability
+		PKMF_End(),
+		// Security properties
+		Secret(<'PKMF', ~idPKMF>, 'UPPRUKID', UP_PRUKID),	
+		Secret(<'PKMF', ~idPKMF>, 'RSC', RSC),
+        Secret(<'PKMF', ~idPKMF>, 'K_NRp', K_NRp),                        	
+		Running( ~idPKMF, supi_relay, <'relay', 'PKMF', <'RSC', RSC>>),
+		Running( ~idPKMF, supi_relay, <'relay', 'PKMF', <'supi_relay', supi_relay>>),
+		Commit( ~idPKMF,  supi_relay, <'PKMF', 'relay', <'RSC', RSC>>),
+		Commit( ~idPKMF,  supi_relay, <'PKMF', 'relay', <'supi_relay', supi_relay>>),
+		Commit( ~idPKMF,  idHN, <'PKMF', 'HN', <'RSC', RSC>>),
+		Commit( ~idPKMF, ~supi, <'PKMF', 'remote', <'RSC', RSC>>),
+		Honest( ~supi),
+		Honest( supi_relay),
+		Honest( idHN),
+		Honest(~idPKMF)	
+	]->
+	 [St_2_PKMF(transactionid, suci, User_info_relay, ~supi, ~idPKMF, supi_relay, idHN, RSC, Nonce1, ~cid, RAND),
+	  SndS(transactionid, ~idPKMF, supi_relay, <'relay_auth_request', msgOut>)]
+
+rule relay_receive_relay_auth_request_step6:
+	let
+		msgin = <K_NRp, ~Nonce2, UP_PRUKID, <RAND, AUTN, P_TID, GPI_MAC>>
+		K_relay_sess=KDF(K_NRp, <Nonce1, ~Nonce2>)
+		K_relay_enc=KDF(K_relay_sess, <'0x00', 'confidential_algorithm'>)
+		K_relay_int=KDF(K_relay_sess, <'0x01', 'integrity_algorithm'>)
+		KsessID=<~LSB_KsessID,~MSB_KsessID>
+	in
+	[
+	Fr(~LSB_KsessID),
+	St_1_relay(~transactionid, suci, ~supi,~User_info_relay, ~idPKMF, idHN, ~supi_relay, ~RSC, Nonce1, ~SeCap, ~CP_Se_Po, ~MSB_KsessID),
+	RcvS(~transactionid, ~idPKMF, ~supi_relay, <'relay_auth_request', msgin>)]
+	--[
+		// Open chains
+		In_relay2(K_NRp, ~Nonce2, UP_PRUKID, <RAND, AUTN, P_TID, GPI_MAC>),
+		Commit(~supi_relay,  ~idPKMF, <'relay', 'PKMF', <'RSC', ~RSC>>),
+		Commit(~supi_relay,  ~idPKMF, <'relay', 'PKMF', <'supi_relay', ~supi_relay>>),
+		Commit(~supi_relay,   idHN, <'relay', 'HN', <'RSC',~RSC>>),
+		Commit(~supi_relay,   idHN, <'relay', 'HN', <'UP_PRUKID', UP_PRUKID>>),
+		Commit(~supi_relay,   idHN, <'relay', 'HN', <'K_NRp', K_NRp>>),
+		Honest(~supi),
+		Honest(~supi_relay),
+		Honest( idHN),
+		Honest(~idPKMF)	
+	]->
+	 [St_2_relay(~transactionid, suci, ~supi,~User_info_relay, ~idPKMF, idHN, ~supi_relay, ~RSC, Nonce1, ~SeCap, ~CP_Se_Po, ~MSB_KsessID,  RAND, K_NRp,  UP_PRUKID,  ~Nonce2, K_relay_sess, K_relay_enc, K_relay_int, KsessID),
+	Out(<'DSMCommand', ~Nonce2, ~CP_Se_Po, ~SeCap, ~LSB_KsessID, <RAND, AUTN, P_TID, GPI_MAC>, KDF(K_relay_int,<~CP_Se_Po, ~Nonce2, ~SeCap, ~LSB_KsessID, <RAND, AUTN, P_TID, GPI_MAC>>)>)
+	]
+
+// The UE accepts a Sqn iff it is greater than SqnMax (delta = infinity).
+// The UE stores the greatest Sqn accepted.
+rule ue_receive_DSMCommand_step7a:
+	let
+		// Input, checks
+		SqnHN = SqnUE + dif // check freshness
+		CK = f3(~k, RAND)
+		IK = f4(~k, RAND)
+		AK = f5(~k, RAND)
+		MAC = f1(~k, <SqnHN, RAND>) // check on the MAC
+        AUTN = <SqnHN XOR AK, MAC>
+        GPI_K_Enc = KDF( <CK, IK>, <RAND, ~supi, 'GPI_confidentiality'> )//ignore the useless 'gba-me'
+		P_TID = senc(UP_PRUKID, GPI_K_Enc)
+		GPI_K_Int = KDF( <CK, IK>, <RAND, ~supi, 'GPI_integrity'> )
+		GPI_MAC = Int(GPI_K_Int, <RAND, AUTN, senc(UP_PRUKID, GPI_K_Enc)>)
+		GPI=<RAND, AUTN, P_TID, GPI_MAC> // see 5.3.2 TS33.223
+		UP_PRUK = KDF(<CK, IK>, <RAND, ~supi, ~idHN>)
+		K_NRp=KDF(UP_PRUK, <~RSC, Nonce1, ~Nonce2>)
+		K_relay_sess=KDF(K_NRp, <Nonce1, ~Nonce2>)
+		K_relay_enc=KDF(K_relay_sess, <'0x00', 'confidential_algorithm'>)
+		K_relay_int=KDF(K_relay_sess, <'0x01', 'integrity_algorithm'>)
+		KsessID=<~LSB_KsessID, ~MSB_KsessID>
+		
+	in
+	[St_1_UE(~supi_relay, ~supi, ~User_info_remote, ~User_info_relay, ~idHN, ~k, ~sqn_root, ~RSC, Nonce1, ~DUCK, ~DUIK, ~SeCap, ~CP_Se_Po, ~UP_Se_Po, ~MSB_KsessID),
+	 Sqn_UE(~supi, ~idHN, SqnUE, ~sqn_root, count),
+	 !PKMF(idPKMF),
+	 In(<'DSMCommand', ~Nonce2, ~CP_Se_Po, ~SeCap, ~LSB_KsessID, <RAND, AUTN, P_TID, GPI_MAC>, KDF(K_relay_int,<~CP_Se_Po, ~Nonce2, ~SeCap, ~LSB_KsessID, <RAND, AUTN, P_TID, GPI_MAC>>)>)]
+	--[
+		// Open chains
+		Sqn_UE_Invariance(~supi, ~idHN, SqnHN, ~sqn_root, count+dif),
+		
+		// Helper lemmas
+		Sqn_UE_Change(~supi, ~idHN, SqnHN),
+		Sqn_UE_Use(~supi, ~idHN, SqnHN),
+		
+		// Security properties
+		
+		Running(~supi,~supi_relay, <'relay','remote', <'UP_PRUKID', UP_PRUKID>>),
+		Running(~supi,~supi_relay, <'relay','remote', <'K_NRp', K_NRp>>),
+		Running(~supi,~supi_relay,  <'relay','remote', <'RSC', ~RSC>>),
+		Running(~supi,~supi_relay,  <'relay','remote', <'K_sessID', KsessID>>),
+		Running(~supi,~supi_relay,   <'relay','remote', <'K_relay_sess', K_relay_sess>>),
+		Running(~supi,~supi_relay,  <'relay','remote', <'K_relay_enc', K_relay_enc>>),
+		Running(~supi,~supi_relay,  <'relay','remote', <'K_relay_int', K_relay_int>>),
+		Running(~supi,~supi_relay,  <'relay','remote', <'SeCap', ~SeCap>>),
+		Running(~supi,~supi_relay, <'relay','remote', <'CPsecurity_policy', ~CP_Se_Po>>),
+		Running(~supi,~supi_relay,  <'relay','remote', <'UPsecurity_policy', ~UP_Se_Po>>),
+		Honest(~supi),
+		Honest(~supi_relay),
+		Honest(~idHN),
+		Honest(idPKMF)
+				
+	]->
+	[
+	St_2_UE(~supi_relay, ~supi, ~User_info_remote, ~User_info_relay, ~idHN, ~k, ~sqn_root, ~RSC, Nonce1, ~DUCK, ~DUIK, ~SeCap, ~CP_Se_Po, ~UP_Se_Po, ~MSB_KsessID,  idPKMF, UP_PRUK, UP_PRUKID, K_NRp, ~Nonce2, K_relay_sess, K_relay_enc, K_relay_int, KsessID),
+	 Out(<'DSMComplete',KsessID,senc(<~UP_Se_Po, Int(K_relay_int,<~UP_Se_Po,KsessID>)>,K_relay_enc)>),  //see 38.323 6.2.2.5
+	 Sqn_UE(~supi, ~idHN, SqnHN, ~sqn_root, count+dif)]
+
+rule relay_receive_DSMComplete_step8a:
+       	[
+	St_2_relay(~transactionid, suci, ~supi,~User_info_relay, ~idPKMF, idHN, ~supi_relay, ~RSC, Nonce1, ~SeCap, ~CP_Se_Po, ~MSB_KsessID,  RAND, K_NRp,  UP_PRUKID,  ~Nonce2, K_relay_sess, K_relay_enc, K_relay_int, KsessID),
+	 In(<'DSMComplete',KsessID,senc(<~UP_Se_Po, Int(K_relay_int,<~UP_Se_Po,KsessID>)>,K_relay_enc)>)]
+        --[
+		// Security properties
+		Commit(~supi_relay, ~supi, <'relay','remote', <'UP_PRUKID', UP_PRUKID>>),
+		Commit(~supi_relay, ~supi, <'relay','remote', <'K_NRp', K_NRp>>),
+		Commit(~supi_relay, ~supi, <'relay','remote', <'RSC', ~RSC>>),
+		Commit(~supi_relay, ~supi, <'relay','remote', <'K_sessID', KsessID>>),
+		Commit(~supi_relay, ~supi, <'relay','remote', <'K_relay_sess', K_relay_sess>>),
+		Commit(~supi_relay, ~supi, <'relay','remote', <'K_relay_enc', K_relay_enc>>),
+		Commit(~supi_relay, ~supi, <'relay','remote', <'K_relay_int', K_relay_int>>),
+		Commit(~supi_relay, ~supi, <'relay','remote', <'SeCap', ~SeCap>>),
+		Commit(~supi_relay, ~supi, <'relay','remote', <'CPsecurity_policy', ~CP_Se_Po>>),
+		Commit(~supi_relay, ~supi, <'relay','remote', <'UPsecurity_policy', ~UP_Se_Po>>),
+		
+		Secret(<'relay', ~supi_relay>, 'K_relay_sess', K_relay_sess),
+		Secret(<'relay', ~supi_relay>, 'K_relay_enc', K_relay_enc),
+		Secret(<'relay', ~supi_relay>, 'K_relay_int', K_relay_int),
+		Secret(<'relay', ~supi_relay>, 'UPPRUKID', UP_PRUKID),                     
+		Secret(<'relay', ~supi_relay>, 'RSC', ~RSC),
+		Secret(<'relay', ~supi_relay>, 'K_NRp', K_NRp),
+		Running(~supi_relay, ~supi, <'remote','relay', <'UPsecurity_policy', ~UP_Se_Po>>),
+		Running(~supi_relay, ~supi, <'remote', 'relay',<'K_sessID', KsessID>>),
+		Running(~supi_relay, ~supi, <'remote', 'relay',<'K_relay_sess', K_relay_sess>>),
+		Running(~supi_relay, ~supi, <'remote', 'relay',<'K_relay_enc', K_relay_enc>>),
+		Running(~supi_relay, ~supi, <'remote', 'relay',<'K_relay_int', K_relay_int>>),
+		Running(~supi_relay, ~supi, <'remote', 'relay',<'UP_PRUKID', UP_PRUKID>>),
+		Running(~supi_relay, ~supi, <'remote', 'relay',<'K_NRp', K_NRp>>),
+		Running(~supi_relay, ~supi, <'remote', 'relay',<'RSC', ~RSC>>),
+		Running(~supi_relay, ~supi, <'remote', 'relay',<'SeCap', ~SeCap>>),
+		Running(~supi_relay, ~supi, <'remote', 'relay',<'CPsecurity_policy', ~CP_Se_Po>>),
+		Honest(~supi),
+		Honest(~supi_relay),
+		Honest(idHN),
+		Honest(~idPKMF)
+		
+	]->
+	[Out(<'DCA',KsessID,senc(<~User_info_relay, Int(K_relay_int,<~User_info_relay,KsessID>)>,K_relay_enc)>)]
+
+rule ue_receive_DCA_step9:
+	[
+	St_2_UE(~supi_relay, ~supi, ~User_info_remote, ~User_info_relay, ~idHN, ~k, ~sqn_root, ~RSC, ~Nonce1, ~DUCK, ~DUIK, ~SeCap, ~CP_Se_Po, ~UP_Se_Po, ~MSB_KsessID,  idPKMF, UP_PRUK, UP_PRUKID, K_NRp, ~Nonce2, K_relay_sess, K_relay_enc, K_relay_int, KsessID),
+	In(<'DCA',KsessID,senc(<~User_info_relay, Int(K_relay_int,<~User_info_relay,KsessID>)>,K_relay_enc)>)]
+	--[	
+		UE_End(),
+		//Security properties 
+		
+		Secret(<'remote', ~supi>, 'K_relay_sess', K_relay_sess),
+		Secret(<'remote', ~supi>, 'K_relay_enc', K_relay_enc),
+		Secret(<'remote', ~supi>, 'K_relay_int', K_relay_int),
+		Secret(<'remote', ~supi>, 'UPPRUKID', UP_PRUKID),
+		Secret(<'remote', ~supi>, 'UPPRUK', UP_PRUK),
+		Secret(<'remote', ~supi>, 'supi', ~supi),
+		Secret(<'remote', ~supi>, 'RSC', ~RSC),
+		Secret(<'remote', ~supi>, 'K_NRp', K_NRp),
+		
+		Commit(~supi,~supi_relay,  <'remote','relay', <'K_sessID', KsessID>>),
+		Commit(~supi,~supi_relay, <'remote','relay', <'K_relay_sess', K_relay_sess>>),
+		Commit(~supi,~supi_relay, <'remote','relay', <'K_relay_enc', K_relay_enc>>),
+		Commit(~supi,~supi_relay,  <'remote','relay',<'K_relay_int', K_relay_int>>),
+		Commit(~supi,~supi_relay, <'remote', 'relay',<'UP_PRUKID', UP_PRUKID>>),
+		Commit(~supi,~supi_relay, <'remote', 'relay',<'K_NRp', K_NRp>>),
+		Commit(~supi,~supi_relay,  <'remote', 'relay',<'RSC', ~RSC>>),
+		Commit(~supi,~supi_relay,  <'remote','relay', <'SeCap', ~SeCap>>),
+		Commit(~supi,~supi_relay, <'remote','relay', <'CPsecurity_policy', ~CP_Se_Po>>),
+		Commit(~supi,~supi_relay, <'remote','relay', <'UPsecurity_policy', ~UP_Se_Po>>),
+		
+		Commit(~supi, ~idHN, <'remote','HN', <'RSC',~RSC>>),
+		Commit(~supi, ~idHN, <'remote','HN', <'supi',~supi>>),	
+		Commit(~supi, ~idHN, <'remote','HN', <'UP_PRUK', UP_PRUK>>),
+		Commit(~supi, ~idHN,  <'remote','HN', <'UP_PRUKID', UP_PRUKID>>),
+		Honest(~supi),
+		Honest(~supi_relay),
+		Honest(~idHN),
+		Honest(idPKMF),
+		Remote_EndConf()
+		
+	]->
+	[]
+
+
+// [3G] Clauses C.2.1, C.2.2
+// The UE reports sync failure if:
+// 	- Received Sqn is bigger but too big (e.g., jumpsize can be at most delta),
+//	- or Received Sqn is not bigger.
+// [3G] Clauses 6.3.3, 6.3.5
+rule ue_Direct_Security_Mode_Failure_step7b:
+	let
+		// Input, checks
+		CK = f3(~k, RAND)
+		IK = f4(~k, RAND)
+		AK = f5(~k, RAND)
+		MAC = f1(~k, <SqnHN, RAND>) // check on the MAC
+        AUTN = <SqnHN XOR AK, MAC>
+		GPI_K_Enc = KDF( <CK, IK>, <RAND, ~supi, 'GPI_confidentiality'> )//ignore the useless 'gba-me'
+		P_TID = senc(UP_PRUKID, GPI_K_Enc)
+		GPI_K_Int = KDF( <CK, IK>, <RAND, ~supi, 'GPI_integrity'> )
+		GPI_MAC = Int(GPI_K_Int, <RAND, AUTN, senc(UP_PRUKID, GPI_K_Enc)>)
+		GPI=<RAND, AUTN, P_TID, GPI_MAC> // see 5.3.2 TS33.223
+
+		// Output
+		AKS = f5_star(~k, RAND)
+		MACS = f1_star(~k, <SqnUE, RAND>)
+		AUTS = <SqnUE XOR AKS, MACS>
+	in
+	[St_1_UE(~supi_relay, ~supi, ~User_info_remote, ~User_info_relay, ~idHN, ~k, ~sqn_root, ~RSC, ~Nonce1, ~DUCK, ~DUIK, ~SeCap, ~CP_Se_Po, ~UP_Se_Po, ~MSB_KsessID),
+	 Sqn_UE(~supi, ~idHN, SqnUE, ~sqn_root, count),
+	 In(<'DSMCommand', ~Nonce2, ~CP_Se_Po, ~SeCap, ~LSB_KsessID, <RAND, AUTN, P_TID, GPI_MAC>, KDF(K_relay_int,<~CP_Se_Po, ~Nonce2, ~SeCap, ~LSB_KsessID, <RAND, AUTN, P_TID, GPI_MAC>>)>),
+	 In(count)]		// necessary to avoid open chains
+	--[
+		// Restriction
+		Greater_Or_Equal_Than(SqnUE, SqnHN), // Check freshness (FAIL)
+
+		// Open chains
+        Sqn_UE_Invariance(~supi, ~idHN, SqnUE, ~sqn_root, count),
+		
+		
+	    // Helper lemmas
+		Sqn_UE_Nochange(~supi, ~idHN, SqnUE)
+	]->
+	[Out(<RAND,AUTS>),
+	 Sqn_UE(~supi, ~idHN, SqnUE, ~sqn_root, count)]
+
+rule relay_receive_syncFailure_authResp_step8b:
+	[
+	St_2_relay(~transactionid, suci, ~supi,~User_info_relay, ~idPKMF, idHN, ~supi_relay, RSC, Nonce1, ~SeCap, ~CP_Se_Po, ~MSB_KsessID,  RAND, K_NRp,  UP_PRUKID,  ~Nonce2, K_relay_sess, K_relay_enc, K_relay_int, KsessID),
+	In(<RAND,AUTS>)
+	]--[
+	Out_relay5(idHN, suci, RSC, Nonce1, RAND, AUTS)
+	]->
+	[
+	SndS(~transactionid, ~supi_relay, ~idPKMF, <'resync', idHN, suci, RSC, Nonce1, RAND, AUTS>)
+	]
+
+rule PKMF_receive_syncFailure_send_authSync_step9b:
+
+	[St_2_PKMF(transactionid, suci, User_info_relay, ~supi, ~idPKMF, supi_relay, idHN, RSC, Nonce1, ~cid,  RAND),
+	RcvS(transactionid, supi_relay, ~idPKMF, <'resync', idHN, suci, RSC, Nonce1, RAND, AUTS>)]
+	--[
+		In_PKMF5(idHN, suci, RSC, Nonce1, RAND,AUTS)
+	]->
+	[SndS(~cid, ~idPKMF, idHN, <'resync', idHN, suci, RSC, Nonce1, RAND, AUTS>)]
+
+rule HN_receive_authSync_step10b:
+	let
+		SqnUE = dif + SqnHN // check that SqnUE > SqnHN
+		AKS = f5_star(~k, ~RAND)
+		MACS = f1_star(~k, <SqnUE, ~RAND>)
+		AUTS = <SqnUE XOR AKS, MACS >
+	in
+	[
+	 St_1_HN(~idHN, suci, ~supi, ~User_info_relay, ~supi_relay, idPKMF, ~k, SqnNext,  ~RAND, ~sqn_root, ~sk_HN, ~cid, ~RSC, Nonce1, UP_PRUK, UP_PRUKID),
+	 Sqn_HN(~supi, ~idHN, SqnHN, ~sqn_root, count),
+	 RcvS(~cid, idPKMF, ~idHN, <'resync',~idHN, suci, ~RSC, Nonce1, ~RAND, AUTS>),
+	 In(count+dif)]
+	--[
+		// Open chains
+		Sqn_HN_Invariance(~idHN, ~supi, SqnUE, ~sqn_root, count+dif),
+
+		// Executability
+		HN_Resync_End(count+dif)
+	]->
+	[Sqn_HN(~supi, ~idHN, SqnUE, ~sqn_root, count+dif)]
+
+
+/************************************/
+/*     Restrictions / Axioms        */
+/************************************/
+
+restriction subscribe_once:
+	" All HN1 HN2 supi #i #j. Subscribe(supi, HN1)@i & Subscribe(supi, HN2)@j ==> (#i = #j & HN1 = HN2)"
+
+restriction greater_or_equal_than:
+  	" All x y #i. Greater_Or_Equal_Than(x,y)@i ==> not (Ex z. x + z = y) "
+
+restriction once:
+        " All #i #j. Once()@i & Once()@j ==> #i = #j "
+// Dummy lemma for timing info only.
+lemma dummy: "not(F)"
+
+
+restriction phases:
+    " All UE1 UE2 #i #j. Start_UE_Session(UE1)@i & Start_UE_Session(UE2)@j ==> 
+    (  #i = #j 
+    |  (Ex #k. UE_End()@k & i < k & k < j)
+    |  (Ex #k. UE_End()@k & j < k & k < i)
+    )"
+
+
+/************************************/
+/*         Sources lemmas           */
+/************************************/
+lemma src_1 [sources]:
+  	" All transactionid suci RSC Nonce1 #i. In_PKMF(transactionid, suci, RSC, Nonce1)@i
+		==> (Ex #j. Out_relay(transactionid, suci, RSC, Nonce1)@j & j < i)"
+
+lemma src_2 [sources]:
+  	" All K_NRp Nonce2 UP_PRUKID RAND AUTN P_TID GPI_MAC #i. In_PKMF2(<K_NRp, Nonce2, UP_PRUKID, <RAND, AUTN, P_TID, GPI_MAC>>)@i
+		==> (Ex #j. Out_HN(<K_NRp, Nonce2, UP_PRUKID, <RAND, AUTN, P_TID, GPI_MAC>>)@j & j < i)"
+
+lemma src_3 [sources]:
+  	" All  K_NRp Nonce2 UP_PRUKID RAND AUTN P_TID GPI_MAC #i. In_relay2(K_NRp, Nonce2, UP_PRUKID, <RAND, AUTN, P_TID, GPI_MAC>)@i
+		==> (Ex #j. Out_PKMF2(K_NRp, Nonce2, UP_PRUKID, <RAND, AUTN, P_TID, GPI_MAC>)@j & j < i) "		
+
+
+lemma src_4 [sources]:
+  	" All idHN suci RSC Nonce1 RAND AUTS  #i. In_PKMF5(idHN, suci, RSC, Nonce1, RAND,AUTS)@i
+		==> (Ex #j. Out_relay5(idHN, suci, RSC, Nonce1, RAND,AUTS)@j & j < i)"
+
+	
+// proof (automatic) (~1 sec)
+lemma sqn_ue_invariance [use_induction, sources]:
+	" All supi HN Sqn sqn_root count #i.
+		Sqn_UE_Invariance(supi, HN, Sqn, sqn_root, count)@i
+			==> sqn_root + count = Sqn"
+
+// proof (automatic) (~1 sec)
+lemma sqn_HN_invariance [use_induction, sources]:
+	" All HN supi Sqn sqn_root count #i.
+		Sqn_HN_Invariance(HN, supi, Sqn, sqn_root, count)@i
+			==> sqn_root + count = Sqn "
+
+/************************************/
+/*          Helper lemmas           */
+/************************************/
+
+// proof (automatic) (~1 sec)
+lemma sqn_ue_src [use_induction, reuse]:
+	" All supi HN Sqn sqn_root count #i.
+		Sqn_UE_Invariance(supi, HN, Sqn, sqn_root, count)@i
+			==> (Ex #j. Sqn_Create(supi, HN, sqn_root)@j & j < i) "
+
+// proof (automatic) (~1 sec)
+lemma sqn_HN_src [reuse]:
+	" All HN supi Sqn sqn_root count #i.
+		Sqn_HN_Invariance(HN, supi, Sqn, sqn_root, count)@i
+			==> (Ex #j. Sqn_Create(supi, HN, sqn_root)@j & j < i) "
+
+// proof (automatic) (~2 min)
+lemma sqn_ue_nodecrease [use_induction, reuse]:
+	" (All supi HN Sqni Sqnj #i #j.
+		(Sqn_UE_Change(supi, HN, Sqnj)@j &
+		 Sqn_UE_Change(supi, HN, Sqni)@i &
+		 i < j)	==> (Ex dif. Sqnj = Sqni + dif)) &
+	  (All supi HN Sqni Sqnj #i #j.
+		(Sqn_UE_Change(supi, HN, Sqnj)@j &
+		 Sqn_UE_Nochange(supi, HN, Sqni)@i &
+		 i < j)	==> (Ex dif. Sqnj = Sqni + dif)) &
+	  (All supi HN Sqni Sqnj #i #j.
+		(Sqn_UE_Nochange(supi, HN, Sqnj)@j &
+		 Sqn_UE_Change(supi, HN, Sqni)@i &
+		 i < j)	==> ((Sqnj = Sqni) | (Ex dif. Sqnj = Sqni + dif))) &
+	  (All supi HN Sqni Sqnj #i #j.
+		(Sqn_UE_Nochange(supi, HN, Sqnj)@j &
+		 Sqn_UE_Nochange(supi, HN, Sqni)@i &
+		 i < j)	==> ((Sqnj = Sqni) | (Ex dif. Sqnj = Sqni + dif))) "
+
+// proof (automatic) (~1 sec)
+lemma sqn_ue_unique [reuse, hide_lemma=sqn_ue_src, hide_lemma=sqn_HN_src]:
+	" All supi HN Sqn #i #j.
+		Sqn_UE_Use(supi, HN, Sqn)@i & Sqn_UE_Use(supi, HN, Sqn)@j
+			==> #i = #j "
+
+/************************************/
+/*     Executability lemmas         */
+/************************************/
+// This lemma shows a normal execution without resync. but with key confirmation
+// proof (automatic) (~6 min)
+lemma executability_honest:
+	exists-trace
+	" Ex #i. Remote_EndConf()@i
+		& not (Ex X data #r. Rev(X,data)@r)
+		& (All HN1 HN2 #j #k. HomeNet(HN1)@j &
+				      HomeNet(HN2)@k ==> #j = #k)
+		& (All S1 S2 HN1 HN2 #j #k. Subscribe(S1, HN1)@j &
+					    Subscribe(S2, HN2)@k ==> #j = #k)
+		& (All PKMF1 PKMF2 #j #k. PKMF_relay(PKMF1)@j &
+				      	PKMF_relay(PKMF2)@k ==> #j = #k)
+		& (All relay1 relay2 #j #k. CreateRelay(relay1) @j &
+			         CreateRelay(relay2) @k ==> #j =  #k ) 
+		& (All PKMFID1 PKMFID2 #j #k. Start_PKMF_Session(PKMFID1)@j &
+				          Start_PKMF_Session(PKMFID2)@k ==> #j = #k) 
+		& (All supi_relay1 supi_relay2 #j #k. Start_relay_Session(supi_relay1)@j &
+					Start_relay_Session(supi_relay2)@k ==>#j=#k)
+		& (All UE1 UE2 #j #k. Start_UE_Session(UE1)@j &
+				          Start_UE_Session(UE2)@k ==> #j = #k) 
+		& (All HN1 HN2 #j #k. Start_HN_Session(HN1)@j &
+				      Start_HN_Session(HN2)@k ==> #j = #k)"
+
+
+end
+
+
+
+	

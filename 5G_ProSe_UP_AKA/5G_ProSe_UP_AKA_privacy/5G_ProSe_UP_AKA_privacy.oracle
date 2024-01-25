@@ -1,0 +1,120 @@
+#!/usr/bin/python
+
+import re
+import os
+import sys
+debug = True
+
+lines = sys.stdin.readlines()
+lemma = sys.argv[1]
+
+# INPUT:
+# - lines contain a list of "%i:goal" where "%i" is the index of the goal
+# - lemma contain the name of the lemma under scrutiny
+# OUTPUT:
+# - (on stdout) a list of ordered index separated by EOL
+
+
+rank = []             # list of list of goals, main list is ordered by priority
+maxPrio = 110
+for i in range(0,maxPrio):
+  rank.append([])
+
+# SOURCES AND REUSE LEMMAS
+
+if lemma == "sqn_ue_invariance" or \
+   lemma == "sqn_HN_invariance" or \
+   lemma == "sqn_ue_src" or \
+   lemma == "sqn_HN_src":
+  for line in lines:
+    num = line.split(':')[0]
+    if re.match('.*last.*', line): rank[100].append(num)
+    elif re.match('.*St_1_HN\(.*', line): rank[95].append(num)
+    elif re.match('.*St_1_UE\(.*', line): rank[95].append(num)
+    elif re.match('.*=.*', line): rank[93].append(num)
+    elif re.match('.*Sqn_HN\(.*count.1.*', line): rank[92].append(num)
+    elif re.match('.*Sqn_HN\(.*', line): rank[90].append(num)
+    elif re.match('.*Sqn_UE\(.*', line): rank[90].append(num)
+
+
+elif lemma == "sqn_ue_nodecrease":
+  for line in lines:
+    num = line.split(':')[0]    
+    if re.match('.*St_._UE.*', line): rank[100].append(num)
+    elif re.match('.*Sqn_UE\(.*', line): rank[90].append(num)
+
+
+
+# EXECUTABILITY LEMMAS
+elif lemma == "executability_honest":
+  for line in lines:
+    num = line.split(':')[0]  
+    if re.match('.*!KU\( ~k.*', line): rank[100].append(num)
+    elif re.match('.*RcvS\(.*ProseAuthenticateResponse2.*PRUKID.*, K_NRp.*', line): rank[100].append(num)
+    elif re.match('.*Sqn_HN\(.*~sqn_root\), ~sqn_root.*', line): rank[100].append(num)
+    elif re.match('.*!KU\( f3\(~k.*', line): rank[100].append(num)
+    elif re.match('.*!KU\( f5\(~k.*', line): rank[100].append(num)
+    elif re.match('.* !KU\( ~sk.*', line):rank[100].append(num)
+    elif re.match('.*St_._HN\(.*', line): rank[98].append(num)
+    elif re.match('.*St_._UE\(.*', line): rank[98].append(num)
+    elif re.match('.*St_._relay\(.*', line): rank[98].append(num)
+    elif re.match('.*Sqn_HN\(.*', line): rank[97].append(num)
+    elif re.match('.*!K.\( KDF\(<f3\(~k, .*', line): rank[96].append(num)
+    elif re.match('.*!K.\( KDF\(KDF\(<f3\(~k, .*', line): rank[95].append(num)
+    elif re.match('.*!K.\( KDF\(KDF\(KDF\(<f3\(~k, .*', line): rank[94].append(num)
+    elif re.match('.*!K.\( KDF\(KDF\(KDF\(KDF\(<f3\(~k, .*', line): rank[93].append(num)   
+    elif re.match('.*!K.\( KDF\(KDF\(KDF\(KDF\(KDF\(<f3\(~k, .*', line): rank[92].append(num) 
+    elif re.match('.*!K.\( KDF\(KDF\(KDF\(KDF\(KDF\(KDF\(<f3\(~k, .*', line): rank[91].append(num)
+    elif re.match('.*!K.\( KDF\(KDF\(KDF\(KDF\(KDF\(KDF\(KDF\(<f3\(~k, .*', line): rank[91].append(num)  
+    elif re.match('.*RcvS\(.*', line): rank[90].append(num)
+    elif re.match('.*!K.\( senc\(.*', line): rank[88].append(num)
+    elif re.match('.* !KU\( ~RSC.*', line):rank[87].append(num)
+    elif re.match('.* !KU\( ~DUIK.*', line):rank[86].append(num)
+    elif re.match('.* !KU\( ~supi.*', line):rank[85].append(num)
+    elif re.match('.* !KU\( ~sqn_root.*', line):rank[84].append(num)
+    elif re.match('.*!K.\( aenc\(.*pk.*', line): rank[82].append(num)
+    elif re.match('.*!K.\( KDF\(.*', line): rank[76].append(num)
+    elif re.match('.*!K.\( Int\(.*', line): rank[75].append(num)
+    elif re.match('.*~~>.*', line): rank[83].append(num)
+    elif re.match('.*Sqn_UE\(.*', line): rank[70].append(num)
+    elif re.match('.*!KU\( f1\(~k.*', line): rank[70].append(num)
+    elif re.match('.*!KU\( \(f5\(~k.*', line): rank[70].append(num)    
+    elif re.match('.*!K.\( \(~RSC.*', line): rank[67].append(num)
+    
+elif lemma == "Observational_equivalence":
+   for line in lines:
+    num = line.split(':')[0]
+    if  re.match('.*!KU\( ~k \)', line): rank[100].append(num)
+    elif re.match('.*!KU\( ~supi \)', line): rank[95].append(num)
+    elif re.match('.*!KU\( ~sk_HN \)', line): rank[95].append(num)
+    elif re.match('.*!KU\( f5\(~k, ~RAND.* \)', line): rank[95].append(num)
+    elif re.match('.*!KU\( f5_star\(~k,.*RAND.3\) \)', line): rank[95].append(num)
+    elif re.match('.*RcvS\(.*ProseAuthenticateResponse2.*PRUKID.*, K_NRp.*', line): rank[93].append(num)
+    elif re.match('.*Sqn_HN\(.*~sqn_root\), ~sqn_root.*', line): rank[93].append(num)
+    elif re.match('.*~~>.*', line): rank[93].append(num)
+    elif re.match('.*Sqn_UE\( ~supi,.*, ~sqn_root.*', line): rank[91].append(num)
+    elif re.match('.*St_._HN\( .*', line): rank[90].append(num)
+    elif re.match('.*St_._UE\( .*', line): rank[90].append(num)
+    elif re.match('.*!KU\( ~sqn_root \)', line): rank[89].append(num)
+    elif re.match('.*\(#j.. < #vr.*', line): rank[88].append(num)
+    elif re.match('.* !KU\( ~DUIK.*', line):rank[84].append(num)
+    elif re.match('.*!KU\( KDF\(~DUIK,.*', line): rank[82].append(num)
+    elif re.match('.*!KU\( <f3.*', line): rank[72].append(num)
+    elif re.match('.*!KU\( KDF\(<f3.*', line): rank[72].append(num)
+    elif re.match('.*!KU\( KDF\(KDF\(<f3.*', line): rank[72].append(num)
+    elif re.match('.*!KU\( KDF\(KDF\(KDF\(<f3.*', line): rank[70].append(num)
+    elif re.match('.*RcvS\( ~cid.1, ~idSN, ~idHN.*ProseAuthenticateRequest.*aenc\(<.*', line): rank[67].append(num)
+    elif re.match('.*RcvS\( ~cid.1, ~idSN.1, ~idHN.*ProseAuthenticateRequest.*aenc\(<.*', line): rank[66].append(num)
+    elif re.match('.*RcvS\(.*ProseAuthenticateResponse.*(KDF\(){3}<f3\(~k.*', line): rank[64].append(num)
+    elif re.match('.*RcvS\(.*relay_auth_request.*(KDF\(){3}<f3\(~k.*', line): rank[64].append(num)
+    elif re.match('.*RcvS\( ~cid, ~idSN, ~idHN.*ProseAuthenticateRequest.*aenc\(<.*', line): rank[62].append(num)
+
+else:
+  exit(0)
+
+# Ordering all goals by ranking (higher first)
+for listGoals in reversed(rank):
+  for goal in listGoals:
+    sys.stderr.write(goal)
+    print (goal)
+
